@@ -1,188 +1,25 @@
-# Roblox-SnowParty-NPC-IA
-local event = game.ReplicatedStorage:WaitForChild("CapyDestination")
-local npc = script.Parent
-local humanoid = npc.Humanoid
-local root = npc.HumanoidRootPart
-local head = npc.Head
+# ❄️ Snow Party - Capy NPC Guia com Inteligência Artificial (Groq/Llama 3.1)
 
-local PathfindingService = game:GetService("PathfindingService")
-local Players = game:GetService("Players")
-local ChatService = game:GetService("Chat")
-local maxDistance = 30000
+Este repositório contém o sistema de inteligência artificial e pathfinding do NPC **Capy**, a capivara guia turística do jogo **Snow Party** no Roblox. O projeto une conversação contextualizada em tempo real com movimentação automatizada pelo mapa.
 
-local HttpService = game:GetService("HttpService")
-local API_KEY = "Sua_Chave_API_Groqw" 
-local GROQ_URL = "https://api.groq.com/openai/v1/chat/completions" 
+---
 
--- ==========================================
--- FUNÇÃO DA INTELIGÊNCIA ARTIFICIAL (GROQ)
--- ==========================================
-local function perguntarParaIA(mensagemDoJogador)
-	local contextoDoNPC = 
-		"Você é a Capy, uma capivara guia turística super amigável no jogo do Roblox chamado 'Snow Party'.\n" ..
-		"REGRAS DE LOCAIS:\n" ..
-		"Os únicos locais do mapa são: 'Área da Piscina', 'Salão Principal', 'Capy Store', 'Área de Eventos' e 'Spawn'. Seu favorito é a Área da Piscina.\n\n" ..
-		"REGRA DE MOVIMENTAÇÃO AUTOMÁTICA:\n" ..
-		"Se o jogador pedir para você LEVAR ele a algum lugar, mostrar o mapa, ou pedir para ir ao seu lugar favorito, você DEVE aceitar e colocar obrigatoriamente uma dessas tags exatas no FINAL da sua resposta:\n" ..
-		"- Se for para a Piscina: [IR_PARA:Piscina]\n" ..
-		"- Se for para o Salão Principal: [IR_PARA:Salao]\n" ..
-		"- Se for para a Capy Store: [IR_PARA:Loja]\n" ..
-		"- Se for para a Área de Eventos: [IR_PARA:Evento]\n" ..
-		"- Se for para o Spawn: [IR_PARA:Spawn]\n" ..
-		"Exemplo de resposta: 'Claro, me siga até a piscina morna! [IR_PARA:Piscina]'\n" ..
-		"Se ele estiver apenas conversando e não pediu para se mover, NÃO adicione nenhuma tag. Responda em português de forma curta (máximo 2 frases)."
+## 🔎 O que tem no projeto? (Spoilers & Recursos)
 
-	local payload = {
-		model = "llama-3.1-8b-instant", 
-		messages = {
-			{ role = "system", content = contextoDoNPC },
-			{ role = "user", content = mensagemDoJogador }
-		}
-	}
+Se você veio dar uma espiada no código, aqui está o resumo das mecânicas principais implementadas:
 
-	local success, result = pcall(function()
-		return HttpService:RequestAsync({
-			Url = GROQ_URL,
-			Method = "POST",
-			Headers = {
-				["Authorization"] = "Bearer " .. API_KEY,
-				["Content-Type"] = "application/json"
-			},
-			Body = HttpService:JSONEncode(payload)
-		})
-	end)
+* 🤖 **Cérebro Atualizado (Groq API):** Integração direta com o modelo `llama-3.1-8b-instant`, garantindo respostas ultra-rápidas em português para os jogadores.
+* 🗺️ **Contexto Estrito (Sem Alucinações):** O NPC foi treinado via *system prompt* para conhecer **apenas** os locais reais do mapa (*Área da Piscina, Salão Principal, Capy Store, Área de Eventos e Spawn*), impedindo a IA de inventar lugares que não existem no jogo.
+* 🚀 **Gatilho de Movimento Automático (O Grande Trunfo):** Quando um jogador pede para ser levado a um lugar, a IA injeta uma "tag oculta" na resposta (ex: `[IR_PARA:Piscina]`). O script do Roblox intercepta essa tag, apaga ela do balão de fala para o jogador não ver, e ativa o sistema de caminhada sozinho.
+* 🛤️ **Pathfinding Avançado:** Uso do `PathfindingService` do Roblox para fazer o NPC desviar de obstáculos e pular plataformas de forma inteligente até chegar ao ponto turístico.
+* 👥 **Proximidade Realista:** O NPC possui um limitador de distância de 15 *studs*. Ele não vai responder a jogadores que estiverem "gritando" do outro lado do mapa.
 
-	if success and result.Success then
-		local data = HttpService:JSONDecode(result.Body)
-		return data.choices[1].message.content
-	else
-		warn("Erro na API: ", result.Body)
-		return "Desculpe, deu um tilt no meu cérebro de capivara."
-	end
-end
+---
 
--- ==========================================
--- SISTEMA DE MOVIMENTAÇÃO (PATHFINDING)
--- ==========================================
-local function IrPara(destino)
-	local path = PathfindingService:CreatePath({
-		AgentRadius = 2,
-		AgentHeight = 5,
-		AgentCanJump = true
-	})
+## 🛠️ Como o fluxo funciona por trás dos panos?
 
-	path:ComputeAsync(root.Position, destino.Position)
-
-	if path.Status == Enum.PathStatus.Success then
-		local waypoints = path:GetWaypoints()
-		for _, waypoint in ipairs(waypoints) do
-			if waypoint.Action == Enum.PathWaypointAction.Jump then
-				humanoid.Jump = true
-			end
-			humanoid:MoveTo(waypoint.Position)
-			local chegou = humanoid.MoveToFinished:Wait()
-			if not chegou then break end
-		end
-	end
-end
-
-local function OlharParaJogador(player)
-	local character = player.Character
-	if not character then return end
-	local playerRoot = character:FindFirstChild("HumanoidRootPart")
-	if not playerRoot then return end
-
-	npc:PivotTo(CFrame.lookAt(root.Position, Vector3.new(playerRoot.Position.X, root.Position.Y, playerRoot.Position.Z)))
-end
-
--- ==========================================
--- LÓGICA DO TOUR (AÇÕES DO MAPA)
--- ==========================================
-local function IniciarTour(player, destino)
-	if destino == "Piscina" then
-		ChatService:Chat(head, "Claro! Me siga até a área da piscina.", Enum.ChatColor.White)
-		wait(1.5)
-		IrPara(workspace.TourPoints.PiscinaPoint)
-		OlharParaJogador(player)
-		ChatService:Chat(head, "Bem-vindo à área da piscina! Este é um dos lugares favoritos dos jogadores para relaxar.", Enum.ChatColor.White)
-
-	elseif destino == "Salao" then
-		ChatService:Chat(head, "Vamos conhecer o Salão Principal!", Enum.ChatColor.White)
-		wait(1.5)
-		IrPara(workspace.TourPoints.CaminhoSalao1)
-		IrPara(workspace.TourPoints.CaminhoSalao2)
-		IrPara(workspace.TourPoints.SalaoPoint)
-		OlharParaJogador(player)
-		ChatService:Chat(head, "Chegamos ao Salão Principal! Aqui você encontra a pista de dança e o palco.", Enum.ChatColor.White)
-
-	elseif destino == "Loja" then
-		ChatService:Chat(head, "Vamos até a Capy Store!", Enum.ChatColor.White)
-		wait(1.5)
-		IrPara(workspace.TourPoints.CapyStorePoint)
-		OlharParaJogador(player)
-		ChatService:Chat(head, "Bem-vindo à Capy Store! Aqui você pode gastar suas CapyCoins.", Enum.ChatColor.White)
-
-	elseif destino == "Evento" then
-		ChatService:Chat(head, "Vou te mostrar a Área de Eventos!", Enum.ChatColor.White)
-		wait(1.5)
-		IrPara(workspace.TourPoints.CaminhoEvento1)
-		IrPara(workspace.TourPoints.CaminhoEvento2)
-		IrPara(workspace.TourPoints.CaminhoEvento3)
-		IrPara(workspace.TourPoints.EventoPoint)
-		OlharParaJogador(player)
-		ChatService:Chat(head, "Chegamos à Área de Eventos! Aqui acontecem atividades especiais.", Enum.ChatColor.White)
-
-	elseif destino == "Spawn" then
-		ChatService:Chat(head, "Vamos voltar para o Spawn!", Enum.ChatColor.White)
-		wait(1.5)
-		IrPara(workspace.TourPoints.SpawnPoint)
-		OlharParaJogador(player)
-		ChatService:Chat(head, "Chegamos ao Spawn! O início da nossa jornada.", Enum.ChatColor.White)
-	end
-end
-
--- ==========================================
--- ESCUTAR CHAT DO JOGADOR (INTEGRAÇÃO IA)
--- ==========================================
-local function respondToPlayer(player, message)
-	local character = player.Character
-	if head and character then
-		local playerRoot = character:FindFirstChild("HumanoidRootPart")
-		if playerRoot then
-			-- Só responde se estiver perto (15 studs)
-			local distance = (head.Position - playerRoot.Position).Magnitude
-			if distance <= 15 then
-				ChatService:Chat(head, "Pensando...", Enum.ChatColor.Blue)
-
-				local respostaIA = perguntarParaIA(message)
-
-				-- 1. Verifica se a IA colocou o código secreto de andar
-				local comandoAndar = string.match(respostaIA, "%[IR_PARA:(%w+)%]")
-
-				-- 2. Limpa a tag da mensagem para o jogador não ver o código feio
-				local textoLimpo = string.gsub(respostaIA, "%s*%[IR_PARA:%w+]", "")
-
-				-- 3. Faz a Capy falar o texto limpo
-				ChatService:Chat(head, textoLimpo, Enum.ChatColor.White)
-
-				-- 4. Se tiver comando de andar, ela inicia o tour automaticamente!
-				if comandoAndar then
-					wait(1)
-					IniciarTour(player, comandoAndar)
-				end
-			end
-		end
-	end
-end
-
--- Conexão do Chat
-Players.PlayerAdded:Connect(function(player)
-	player.Chatted:Connect(function(message)
-		respondToPlayer(player, message)
-	end)
-end)
-
--- Mantém o funcionamento dos botões da tela antigos se clicar neles
-event.OnServerEvent:Connect(function(player, destino)
-	IniciarTour(player, destino)
-end)
+1. O Jogador digita no chat perto da Capy: *"Me leva pro seu lugar favorito?"*
+2. O script detecta a proximidade e envia a mensagem para a API do Groq.
+3. A IA processa e responde: *"A área da piscina é o meu lugar favorito! Vamos lá! [IR_PARA:Piscina]"*
+4. O script limpa o texto para exibir apenas a frase fofa no balão azul.
+5. O script lê a tag `Piscina`, calcula a rota física e faz o NPC andar até o `PiscinaPoint` no
